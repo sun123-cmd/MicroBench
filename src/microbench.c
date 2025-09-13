@@ -4,15 +4,38 @@
 #include <unistd.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 
 #define ITERATIONS 2000
 #define WARMUP_ITERATIONS 500
 
-// 获取高精度时间戳
-static inline unsigned long long rdtsc() {
+// 获取高精度时间戳 - 跨平台实现
+static inline unsigned long long get_timestamp() {
+#if defined(__x86_64__) || defined(__i386__)
+    // x86/x86_64: 使用RDTSC指令
     unsigned int lo, hi;
     __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
     return ((unsigned long long)hi << 32) | lo;
+#elif defined(__aarch64__) || defined(__arm__)
+    // ARM/ARM64: 使用通用计时器
+    unsigned long long val;
+    #ifdef __aarch64__
+        // ARM64: 使用cntvct_el0寄存器
+        __asm__ __volatile__("mrs %0, cntvct_el0" : "=r" (val));
+    #else
+        // ARM32: 使用PMU cycle counter (需要权限)
+        // 备选方案：使用clock_gettime
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        val = (unsigned long long)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+    #endif
+    return val;
+#else
+    // 其他架构: 使用标准库函数
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (unsigned long long)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+#endif
 }
 
 // 统计分析结构
@@ -92,7 +115,7 @@ void test_pure_computation() {
     
     // 正式测试
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         // 固定计算序列
         volatile int a = 42 + (i & 0x7);  // 轻微变化避免编译器优化
@@ -104,7 +127,7 @@ void test_pure_computation() {
         volatile int g = f ^ a;
         result += g;
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
@@ -128,7 +151,7 @@ void test_regular_branches() {
     
     // 正式测试 - 4的倍数循环，TAGE应该能学习
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         volatile int x = i % 4;
         if (x == 0) result += 1;
@@ -136,7 +159,7 @@ void test_regular_branches() {
         else if (x == 2) result += 3;
         else result += 4;
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
@@ -162,7 +185,7 @@ void test_pseudo_random_branches() {
     
     // 正式测试 - 难以预测的分支模式
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         seed = seed * 1664525 + 1013904223;
         volatile int x = seed % 7;
@@ -172,7 +195,7 @@ void test_pseudo_random_branches() {
         else if (x < 6) result += 3;
         else result += 4;
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
@@ -200,7 +223,7 @@ void test_nested_branches() {
     
     // 正式测试 - 嵌套分支增加预测难度
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         volatile int x = (i * 7 + 3) % 16;  // 更复杂的模式
         
@@ -218,7 +241,7 @@ void test_nested_branches() {
             }
         }
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
@@ -248,7 +271,7 @@ void test_memory_branch_mixed() {
     
     // 正式测试 - 内存访问结果影响分支
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         volatile int idx1 = i % 128;
         volatile int idx2 = (i * 3) % 256;
@@ -261,7 +284,7 @@ void test_memory_branch_mixed() {
             result -= array[(val1 - val2 + 256) % 512];
         }
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
@@ -284,7 +307,7 @@ void test_high_frequency_branches() {
     
     // 正式测试 - 内层有多个分支
     for (int i = 0; i < ITERATIONS; i++) {
-        unsigned long long start = rdtsc();
+        unsigned long long start = get_timestamp();
         
         volatile int count = 0;
         for (int j = 0; j < 8; j++) {
@@ -294,7 +317,7 @@ void test_high_frequency_branches() {
         }
         result += count;
         
-        unsigned long long end = rdtsc();
+        unsigned long long end = get_timestamp();
         times[i] = end - start;
     }
     
