@@ -90,12 +90,35 @@ The benchmark calculates and reports the following statistical metrics for each 
 
 ## Usage
 
+### Quick Start (Recommended)
 ```bash
-# Compile
-./build.sh
+# Run complete benchmark and analysis from root directory
+./run_benchmark.sh
+```
 
-# Run
-./microbench
+### Manual Execution
+```bash
+# Step 1: Compile (if needed)
+cd src
+bash build.sh
+
+# Step 2: Run benchmark
+cd ../bin
+./microbench > ../result/my_results.txt
+
+# Step 3: Analyze results  
+cd ../tools
+python analyze_results.py ../result/my_results.txt -o ../result/my_analysis.csv
+```
+
+### Analysis Only
+```bash
+# Analyze existing results
+cd tools
+python analyze_results.py ../result/existing_results.txt -o ../result/analysis.csv
+
+# Skip visualization
+python analyze_results.py ../result/results.txt --no-plot
 ```
 
 ## Technical Implementation Details

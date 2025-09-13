@@ -1,0 +1,46 @@
+CSV文件列说明 - MicroBench实时性分析结果
+
+=== 基础测量指标 ===
+Test_Case           - 测试案例名称
+Min_Cycles          - 最小执行时间（CPU周期）
+Max_Cycles          - 最大执行时间（CPU周期）  
+Avg_Cycles          - 平均执行时间（CPU周期）
+Jitter_Cycles       - 抖动值（Max - Min）
+Std_Dev             - 标准差
+CV                  - 变异系数（Coefficient of Variation）
+P95_Cycles          - 95%分位数（CPU周期）
+P99_Cycles          - 99%分位数（CPU周期）
+
+=== 比率指标 ===
+Max_Avg_Ratio       - 最大值/平均值比率（越小越好）
+P99_Avg_Ratio       - 99th分位数/平均值比率（越小越好）
+
+=== 实时性评分（0-100分，越高越好）===
+Jitter_Score        - 抖动评分（基于相对抖动大小）
+StdDev_Score        - 标准差评分（基于相对标准差）
+CV_Score            - 变异系数评分（基于相对变异系数）
+Ratio_Score         - 最大值比率评分（基于Max/Avg比率）
+P99_Score           - 99th分位数比率评分（基于P99/Avg比率）
+Overall_RT_Score    - 综合实时性评分（上述5项加权平均）
+RT_Grade            - 实时性等级评定
+
+=== 评分权重 ===
+综合评分计算权重：
+- Jitter Score: 20%
+- StdDev Score: 20%  
+- CV Score: 25%
+- Ratio Score: 15%
+- P99 Score: 20%
+
+=== 等级标准 ===
+Excellent: 90+     - 优秀的实时性表现
+Good: 75-89        - 良好的实时性表现  
+Fair: 60-74        - 一般的实时性表现
+Poor: 40-59        - 较差的实时性表现
+Very Poor: <40     - 很差的实时性表现
+
+=== 使用建议 ===
+1. 关注Overall_RT_Score进行综合排名
+2. CV（变异系数）是最重要的相对稳定性指标
+3. P99_Avg_Ratio反映最坏情况与典型情况的差距
+4. 实时系统应优先选择评分较高的算法/配置

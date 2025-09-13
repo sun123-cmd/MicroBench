@@ -1,0 +1,12 @@
+MicroBench Real-time Analysis Experiment
+==================================================
+Date: 2025-09-13
+Timestamp: 20250913_174819
+Input File: ../result/temp_benchmark_20250913_174819.txt
+Test Cases: 6
+Generated Files:
+  - Raw Data: benchmark_raw_20250913_174819.txt
+  - Analysis: rt_analysis_20250913_174819.csv
+  - Visualization: rt_analysis_20250913_174819.png
+
+Experiment Directory: ../result/experiment_20250913_174819

@@ -1,0 +1,40 @@
+Scientific Real-time Determinism Test
+Testing CPU predictability under various branch patterns
+Iterations: 2000 (+ 500 warmup)
+
+=== Pure Computation ===
+  Min: 66, Max: 233, Avg: 75
+  Jitter: 167, Std Dev: 7.44
+  95th percentile: 83, 99th percentile: 85
+  Coefficient of Variation: 0.0992
+
+=== Regular Branch Pattern ===
+  Min: 15, Max: 885, Avg: 39
+  Jitter: 870, Std Dev: 41.82
+  95th percentile: 99, 99th percentile: 103
+  Coefficient of Variation: 1.0724
+
+=== Pseudo-Random Branch Pattern ===
+  Min: 12, Max: 58, Avg: 24
+  Jitter: 46, Std Dev: 7.61
+  95th percentile: 40, 99th percentile: 43
+  Coefficient of Variation: 0.3171
+
+=== Nested Branch Pattern ===
+  Min: 12, Max: 50, Avg: 14
+  Jitter: 38, Std Dev: 1.85
+  95th percentile: 16, 99th percentile: 17
+  Coefficient of Variation: 0.1319
+
+=== Memory + Branch Mixed ===
+  Min: 12, Max: 38, Avg: 14
+  Jitter: 26, Std Dev: 2.48
+  95th percentile: 16, 99th percentile: 28
+  Coefficient of Variation: 0.1768
+
+=== High-Frequency Branches ===
+  Min: 12, Max: 213, Avg: 15
+  Jitter: 201, Std Dev: 5.60
+  95th percentile: 16, 99th percentile: 17
+  Coefficient of Variation: 0.3734
+
