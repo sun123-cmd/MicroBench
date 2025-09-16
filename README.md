@@ -93,7 +93,7 @@ The benchmark calculates and reports the following statistical metrics for each 
 ### Quick Start (Recommended)
 ```bash
 # Run complete benchmark and analysis from root directory
-./run_benchmark.sh
+cd ./src && make
 ```
 
 ### Statistical Multi-Run Testing (Recommended for Research)
