@@ -25,6 +25,40 @@ class RealTimeAnalyzer:
             "High-Frequency Branches"
         ]
         self.results = {}
+        self.cpu_model = self._get_cpu_model()
+    
+    def _get_cpu_model(self) -> str:
+        """获取CPU型号信息"""
+        try:
+            # 尝试从 /proc/cpuinfo 读取CPU信息
+            with open('/proc/cpuinfo', 'r') as f:
+                for line in f:
+                    if line.startswith('model name'):
+                        # 提取CPU型号名称
+                        cpu_name = line.split(':', 1)[1].strip()
+                        # 简化CPU名称，移除多余信息
+                        cpu_name = cpu_name.replace('(R)', '').replace('(TM)', '')
+                        cpu_name = ' '.join(cpu_name.split())  # 移除多余空格
+                        return cpu_name
+        except (FileNotFoundError, PermissionError, IndexError):
+            pass
+        
+        # 如果无法读取 /proc/cpuinfo，尝试其他方法
+        try:
+            import subprocess
+            result = subprocess.run(['lscpu'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'Model name:' in line:
+                        cpu_name = line.split(':', 1)[1].strip()
+                        cpu_name = cpu_name.replace('(R)', '').replace('(TM)', '')
+                        cpu_name = ' '.join(cpu_name.split())
+                        return cpu_name
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        
+        # 默认返回值
+        return "Unknown CPU"
         
     def parse_benchmark_output(self, filename: str) -> Dict:
         """Parse benchmark output file"""
@@ -222,7 +256,7 @@ class RealTimeAnalyzer:
         
         # 创建子图
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-        fig.suptitle('MicroBench Real-time Performance Analysis', fontsize=20, fontweight='bold')
+        fig.suptitle(f'MicroBench on {self.cpu_model}', fontsize=20, fontweight='bold')
         
         test_names = [name.replace(' ', '\n') for name in self.test_cases if name in self.results]
         
@@ -304,77 +338,484 @@ class RealTimeAnalyzer:
         
         return output_file
 
+class MultiRunAnalyzer:
+    def __init__(self):
+        self.test_cases = [
+            "Pure Computation",
+            "Regular Branch Pattern", 
+            "Pseudo-Random Branch Pattern",
+            "Nested Branch Pattern",
+            "Memory + Branch Mixed",
+            "High-Frequency Branches"
+        ]
+        self.all_runs_data = []  # 存储所有运行的数据
+        self.statistics = {}     # 存储统计数据
+        self.cpu_model = self._get_cpu_model()
+    
+    def _get_cpu_model(self) -> str:
+        """获取CPU型号信息"""
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                for line in f:
+                    if line.startswith('model name'):
+                        cpu_name = line.split(':', 1)[1].strip()
+                        cpu_name = cpu_name.replace('(R)', '').replace('(TM)', '')
+                        cpu_name = ' '.join(cpu_name.split())
+                        return cpu_name
+        except (FileNotFoundError, PermissionError, IndexError):
+            pass
+        
+        try:
+            import subprocess
+            result = subprocess.run(['lscpu'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if 'Model name:' in line:
+                        cpu_name = line.split(':', 1)[1].strip()
+                        cpu_name = cpu_name.replace('(R)', '').replace('(TM)', '')
+                        cpu_name = ' '.join(cpu_name.split())
+                        return cpu_name
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        
+        return "Unknown CPU"
+    
+    def analyze_multi_runs(self, multi_run_dir: str) -> Dict:
+        """分析多次运行的结果"""
+        import glob
+        
+        # 查找所有运行结果文件
+        result_files = glob.glob(os.path.join(multi_run_dir, "run_*.txt"))
+        
+        if not result_files:
+            raise FileNotFoundError(f"No run result files found in {multi_run_dir}")
+        
+        result_files.sort()  # 按文件名排序
+        print(f"Found {len(result_files)} run result files")
+        
+        # 分析每个运行结果
+        for i, file_path in enumerate(result_files, 1):
+            print(f"Analyzing run {i}/{len(result_files)}: {os.path.basename(file_path)}")
+            
+            analyzer = RealTimeAnalyzer()
+            try:
+                results = analyzer.parse_benchmark_output(file_path)
+                if results:
+                    self.all_runs_data.append(results)
+                else:
+                    print(f"Warning: Failed to parse {file_path}")
+            except Exception as e:
+                print(f"Error analyzing {file_path}: {e}")
+        
+        if not self.all_runs_data:
+            raise ValueError("No valid run data found")
+        
+        print(f"Successfully analyzed {len(self.all_runs_data)} runs")
+        
+        # 计算统计数据
+        self._calculate_statistics()
+        return self.statistics
+    
+    def _calculate_statistics(self):
+        """计算多次运行的统计数据"""
+        import numpy as np
+        
+        # 为每个测试用例计算统计数据
+        for test_case in self.test_cases:
+            if test_case not in self.all_runs_data[0]:
+                continue
+            
+            # 收集该测试用例在所有运行中的数据
+            metrics = ['min', 'max', 'avg', 'jitter', 'std_dev', 'p95', 'p99', 'cv']
+            test_stats = {}
+            
+            for metric in metrics:
+                values = []
+                for run_data in self.all_runs_data:
+                    if test_case in run_data and metric in run_data[test_case]:
+                        values.append(run_data[test_case][metric])
+                
+                if values:
+                    test_stats[metric] = {
+                        'mean': np.mean(values),
+                        'std': np.std(values),
+                        'min': np.min(values),
+                        'max': np.max(values),
+                        'median': np.median(values),
+                        'q25': np.percentile(values, 25),
+                        'q75': np.percentile(values, 75),
+                        'count': len(values),
+                        'raw_values': values
+                    }
+                    
+                    # 计算95%置信区间
+                    if len(values) > 1:
+                        try:
+                            from scipy import stats
+                            confidence = 0.95
+                            alpha = 1 - confidence
+                            dof = len(values) - 1
+                            t_critical = stats.t.ppf(1 - alpha/2, dof)
+                            margin_error = t_critical * (test_stats[metric]['std'] / np.sqrt(len(values)))
+                            test_stats[metric]['ci_lower'] = test_stats[metric]['mean'] - margin_error
+                            test_stats[metric]['ci_upper'] = test_stats[metric]['mean'] + margin_error
+                        except ImportError:
+                            # 如果没有scipy，使用简单的估算（正态分布近似）
+                            margin_error = 1.96 * (test_stats[metric]['std'] / np.sqrt(len(values)))
+                            test_stats[metric]['ci_lower'] = test_stats[metric]['mean'] - margin_error
+                            test_stats[metric]['ci_upper'] = test_stats[metric]['mean'] + margin_error
+            
+            self.statistics[test_case] = test_stats
+    
+    def export_statistics_to_csv(self, output_file: str, output_dir: str = None):
+        """导出统计数据到CSV"""
+        if output_dir:
+            filename = os.path.basename(output_file)
+            output_file = os.path.join(output_dir, filename)
+        
+        headers = [
+            'Test_Case', 'Metric',
+            'Mean', 'Std_Dev', 'Min', 'Max', 'Median',
+            'Q25', 'Q75', 'CI_Lower', 'CI_Upper', 'Sample_Count',
+            'Coefficient_of_Variation'
+        ]
+        
+        rows = []
+        for test_case in self.test_cases:
+            if test_case not in self.statistics:
+                continue
+            
+            for metric, stats in self.statistics[test_case].items():
+                # 计算变异系数
+                cv = stats['std'] / stats['mean'] if stats['mean'] != 0 else 0
+                
+                row = [
+                    test_case, metric,
+                    round(stats['mean'], 4),
+                    round(stats['std'], 4),
+                    round(stats['min'], 4),
+                    round(stats['max'], 4),
+                    round(stats['median'], 4),
+                    round(stats['q25'], 4),
+                    round(stats['q75'], 4),
+                    round(stats.get('ci_lower', 0), 4),
+                    round(stats.get('ci_upper', 0), 4),
+                    stats['count'],
+                    round(cv, 6)
+                ]
+                rows.append(row)
+        
+        with open(output_file, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(rows)
+        
+        print(f"✓ Multi-run statistics exported to: {output_file}")
+        return output_file
+    
+    def create_statistical_visualization(self, output_dir: str = "."):
+        """创建统计可视化图表"""
+        if not HAS_MATPLOTLIB:
+            raise ImportError("matplotlib not installed, cannot generate visualization chart")
+        
+        import numpy as np
+        
+        # 设置字体
+        plt.rcParams['font.family'] = 'DejaVu Sans'  # 使用系统默认字体
+        plt.rcParams['font.size'] = 12
+        plt.rcParams['axes.labelsize'] = 14
+        plt.rcParams['axes.titlesize'] = 16
+        plt.rcParams['xtick.labelsize'] = 12
+        plt.rcParams['ytick.labelsize'] = 12
+        plt.rcParams['legend.fontsize'] = 12
+        plt.rcParams['figure.titlesize'] = 18
+        
+        # 创建子图
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle(f'MicroBench Multi-Run Statistical Analysis on {self.cpu_model}', fontsize=18, fontweight='bold')
+        
+        test_names = [name.replace(' ', '\n') for name in self.test_cases if name in self.statistics]
+        
+        # 1. 平均执行时间及置信区间
+        avg_means = []
+        avg_cis_lower = []
+        avg_cis_upper = []
+        
+        for test_case in self.test_cases:
+            if test_case in self.statistics and 'avg' in self.statistics[test_case]:
+                stats = self.statistics[test_case]['avg']
+                avg_means.append(stats['mean'])
+                avg_cis_lower.append(stats.get('ci_lower', stats['mean']))
+                avg_cis_upper.append(stats.get('ci_upper', stats['mean']))
+            else:
+                avg_means.append(0)
+                avg_cis_lower.append(0)
+                avg_cis_upper.append(0)
+        
+        x_pos = range(len(test_names))
+        bars1 = ax1.bar(x_pos, avg_means, color='skyblue', edgecolor='navy', linewidth=1, alpha=0.7)
+        
+        # 添加误差线（置信区间）
+        yerr_lower = [avg_means[i] - avg_cis_lower[i] for i in range(len(avg_means))]
+        yerr_upper = [avg_cis_upper[i] - avg_means[i] for i in range(len(avg_means))]
+        ax1.errorbar(x_pos, avg_means, yerr=[yerr_lower, yerr_upper], 
+                    fmt='none', color='red', capsize=5, capthick=2)
+        
+        ax1.set_title(f'Average Execution Time with 95% CI\n({len(self.all_runs_data)} runs)', fontweight='bold')
+        ax1.set_ylabel('CPU Cycles', fontweight='bold')
+        ax1.set_xticks(x_pos)
+        ax1.set_xticklabels(test_names, rotation=45, ha='right', fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        
+        # 2. 变异系数的分布
+        cv_means = []
+        cv_stds = []
+        
+        for test_case in self.test_cases:
+            if test_case in self.statistics and 'cv' in self.statistics[test_case]:
+                stats = self.statistics[test_case]['cv']
+                cv_means.append(stats['mean'])
+                cv_stds.append(stats['std'])
+            else:
+                cv_means.append(0)
+                cv_stds.append(0)
+        
+        bars2 = ax2.bar(x_pos, cv_means, yerr=cv_stds, color='lightcoral', 
+                       edgecolor='darkred', linewidth=1, alpha=0.7, capsize=5)
+        ax2.set_title('Coefficient of Variation (Lower is Better)', fontweight='bold')
+        ax2.set_ylabel('CV', fontweight='bold')
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(test_names, rotation=45, ha='right', fontweight='bold')
+        ax2.grid(True, alpha=0.3)
+        
+        # 3. 最大 Jitter 和 Jitter 稳定性
+        max_jitters = []
+        jitter_cvs = []
+        
+        for test_case in self.test_cases:
+            if test_case in self.statistics and 'jitter' in self.statistics[test_case]:
+                stats = self.statistics[test_case]['jitter']
+                # 最大 jitter：所有运行中的最坏情况
+                max_jitters.append(stats['max'])
+                # Jitter 的变异系数：衡量 jitter 的一致性
+                jitter_cv = stats['std'] / stats['mean'] if stats['mean'] != 0 else 0
+                jitter_cvs.append(jitter_cv)
+            else:
+                max_jitters.append(0)
+                jitter_cvs.append(0)
+        
+        # 使用双Y轴显示最大jitter和jitter稳定性
+        ax3_twin = ax3.twinx()
+        
+        # 主轴：最大 jitter (柱状图)
+        bars3 = ax3.bar(x_pos, max_jitters, color='lightgreen', 
+                       edgecolor='darkgreen', linewidth=1, alpha=0.7, width=0.6)
+        ax3.set_title('Maximum Jitter & Jitter Consistency', fontweight='bold')
+        ax3.set_ylabel('Max Jitter (CPU Cycles)', fontweight='bold', color='darkgreen')
+        ax3.set_xticks(x_pos)
+        ax3.set_xticklabels(test_names, rotation=45, ha='right', fontweight='bold')
+        ax3.grid(True, alpha=0.3)
+        ax3.tick_params(axis='y', labelcolor='darkgreen')
+        
+        # 次轴：jitter 变异系数 (折线图)
+        line3 = ax3_twin.plot(x_pos, jitter_cvs, color='red', marker='o', 
+                             linewidth=2, markersize=6, label='Jitter CV')
+        ax3_twin.set_ylabel('Jitter CV (Lower is Better)', fontweight='bold', color='red')
+        ax3_twin.tick_params(axis='y', labelcolor='red')
+        
+        # 添加数值标签
+        for i, (max_jit, cv) in enumerate(zip(max_jitters, jitter_cvs)):
+            # 最大 jitter 标签
+            ax3.text(i, max_jit + max(max_jitters)*0.02,
+                    f'{max_jit}', ha='center', va='bottom', 
+                    fontsize=12, fontweight='bold', color='darkgreen')
+            # CV 标签
+            ax3_twin.text(i + 0.1, cv + max(jitter_cvs)*0.05,
+                         f'{cv:.3f}', ha='left', va='bottom', 
+                         fontsize=10, fontweight='bold', color='red')
+        
+        # 4. 运行之间的一致性（标准差的变异系数）
+        consistency_scores = []
+        
+        for test_case in self.test_cases:
+            if test_case in self.statistics and 'avg' in self.statistics[test_case]:
+                avg_stats = self.statistics[test_case]['avg']
+                # 一致性评分 = 1 / (1 + CV_of_averages)
+                cv_of_avg = avg_stats['std'] / avg_stats['mean'] if avg_stats['mean'] != 0 else 1
+                consistency = 1 / (1 + cv_of_avg)
+                consistency_scores.append(consistency * 100)  # 转换为百分比
+            else:
+                consistency_scores.append(0)
+        
+        bars4 = ax4.bar(x_pos, consistency_scores, color='orange', 
+                       edgecolor='darkorange', linewidth=1, alpha=0.7)
+        ax4.set_title('Cross-Run Consistency Score', fontweight='bold')
+        ax4.set_ylabel('Consistency (%)', fontweight='bold')
+        ax4.set_xticks(x_pos)
+        ax4.set_xticklabels(test_names, rotation=45, ha='right', fontweight='bold')
+        ax4.grid(True, alpha=0.3)
+        ax4.set_ylim(0, 100)
+        
+        plt.tight_layout()
+        
+        # 保存图表
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_file = os.path.join(output_dir, f"multi_run_analysis_{timestamp}.png")
+        
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"✓ Multi-run statistical visualization saved to: {output_file}")
+        
+        return output_file
+    
+    def print_multi_run_summary(self):
+        """打印多次运行的统计摘要"""
+        print("\n" + "="*80)
+        print(f"    Multi-Run Statistical Analysis Summary ({len(self.all_runs_data)} runs)")
+        print("="*80)
+        
+        print(f"{'Test Case':<25} {'Avg±Std':<15} {'Max Jitter':<12} {'CV':<10} {'Consistency':<12}")
+        print("-" * 80)
+        
+        for test_case in self.test_cases:
+            if test_case not in self.statistics:
+                continue
+            
+            avg_stats = self.statistics[test_case].get('avg', {})
+            cv_stats = self.statistics[test_case].get('cv', {})
+            jitter_stats = self.statistics[test_case].get('jitter', {})
+            
+            if avg_stats and cv_stats and jitter_stats:
+                avg_mean = avg_stats['mean']
+                avg_std = avg_stats['std']
+                cv_mean = cv_stats['mean']
+                max_jitter = jitter_stats['max']  # 最大 jitter
+                
+                # 计算一致性评分
+                cv_of_avg = avg_std / avg_mean if avg_mean != 0 else 1
+                consistency = (1 / (1 + cv_of_avg)) * 100
+                
+                print(f"{test_case:<25} {avg_mean:.0f}±{avg_std:.0f}     {max_jitter:<12.0f} {cv_mean:.4f}    {consistency:.1f}%")
+
 def main():
     parser = argparse.ArgumentParser(description='Analyze MicroBench real-time test results')
-    parser.add_argument('input_file', help='benchmark output file path')
+    parser.add_argument('input_file', nargs='?', help='benchmark output file path (for single run)')
     parser.add_argument('-o', '--output', default='rt_analysis.csv', help='output CSV file name')
     parser.add_argument('--no-plot', action='store_true', help='do not generate visualization chart')
+    parser.add_argument('--multi-run', type=str, help='directory containing multiple run result files')
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.input_file):
-        print(f"Error: input file '{args.input_file}' does not exist")
-        sys.exit(1)
-    
-    analyzer = RealTimeAnalyzer()
-    
-    try:
-        print(f"Analyzing file: {args.input_file}")
-        results = analyzer.parse_benchmark_output(args.input_file)
-        
-        if not results:
-            print("Error: Unable to parse valid data from input file")
+    # 检查是多次运行分析还是单次运行分析
+    if args.multi_run:
+        # 多次运行分析
+        if not os.path.exists(args.multi_run):
+            print(f"Error: multi-run directory '{args.multi_run}' does not exist")
             sys.exit(1)
         
-        print(f"✓ Successfully parsed {len(results)} test cases")
+        print(f"Analyzing multiple runs in directory: {args.multi_run}")
         
-        # 创建实验目录
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        date_str = datetime.now().strftime('%Y-%m-%d')
-        experiment_dir = os.path.join("../result", f"experiment_{timestamp}")
-        os.makedirs(experiment_dir, exist_ok=True)
+        multi_analyzer = MultiRunAnalyzer()
         
-        # 保存原始基准测试结果到实验目录
-        original_filename = os.path.basename(args.input_file)
-        original_copy = os.path.join(experiment_dir, f"benchmark_raw_{timestamp}.txt")
-        import shutil
-        shutil.copy2(args.input_file, original_copy)
-        
-        # 导出CSV到实验目录
-        csv_output = analyzer.export_to_csv(args.output, experiment_dir)
-        
-        # 创建实验信息文件
-        info_file = os.path.join(experiment_dir, "experiment_info.txt")
-        with open(info_file, 'w') as f:
-            f.write(f"MicroBench Real-time Analysis Experiment\n")
-            f.write(f"{'='*50}\n")
-            f.write(f"Date: {date_str}\n")
-            f.write(f"Timestamp: {timestamp}\n")
-            f.write(f"Input File: {args.input_file}\n")
-            f.write(f"Test Cases: {len(results)}\n")
-            f.write(f"Generated Files:\n")
-            f.write(f"  - Raw Data: benchmark_raw_{timestamp}.txt\n")
-            f.write(f"  - Analysis: {os.path.basename(csv_output)}\n")
+        try:
+            # 分析多次运行
+            statistics = multi_analyzer.analyze_multi_runs(args.multi_run)
+            
+            if not statistics:
+                print("Error: Unable to generate statistics from multi-run data")
+                sys.exit(1)
+            
+            # 导出统计数据到CSV
+            csv_output = multi_analyzer.export_statistics_to_csv(args.output, args.multi_run)
+            
+            # 打印统计摘要
+            multi_analyzer.print_multi_run_summary()
+            
+            # 生成统计可视化图表
             if not args.no_plot:
-                f.write(f"  - Visualization: rt_analysis_{timestamp}.png\n")
-            f.write(f"\nExperiment Directory: {experiment_dir}\n")
+                try:
+                    chart_file = multi_analyzer.create_statistical_visualization(args.multi_run)
+                except ImportError:
+                    print("Warning: matplotlib not installed, skipping visualization chart generation")
+                    print("Install command: pip install matplotlib numpy")
+                except Exception as e:
+                    print(f"Visualization generation failed: {e}")
+            
+            print(f"\n✓ Multi-run analysis completed. All files saved to: {args.multi_run}")
+            
+        except Exception as e:
+            print(f"Error occurred during multi-run analysis: {e}")
+            sys.exit(1)
+    
+    else:
+        # 单次运行分析（原有逻辑）
+        if not args.input_file:
+            print("Error: input_file is required for single run analysis")
+            print("Use --multi-run for multiple runs analysis or provide input_file for single run")
+            sys.exit(1)
         
-        analyzer.print_summary()
+        if not os.path.exists(args.input_file):
+            print(f"Error: input file '{args.input_file}' does not exist")
+            sys.exit(1)
         
-        if not args.no_plot:
-            try:
-                chart_file = analyzer.create_visualization(experiment_dir)
-            except ImportError as e:
-                print("Warning: matplotlib not installed, skipping visualization chart generation")
-                print("Install command: pip install matplotlib")
-            except Exception as e:
-                print(f"Visualization generation failed: {e}")
+        analyzer = RealTimeAnalyzer()
         
-        print(f"\n✓ Experiment completed. All files saved to: {experiment_dir}")
-        
-    except Exception as e:
-        print(f"Error occurred during analysis: {e}")
-        sys.exit(1)
+        try:
+            print(f"Analyzing file: {args.input_file}")
+            results = analyzer.parse_benchmark_output(args.input_file)
+            
+            if not results:
+                print("Error: Unable to parse valid data from input file")
+                sys.exit(1)
+            
+            print(f"✓ Successfully parsed {len(results)} test cases")
+            
+            # 创建实验目录
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            date_str = datetime.now().strftime('%Y-%m-%d')
+            experiment_dir = os.path.join("../result", f"experiment_{timestamp}")
+            os.makedirs(experiment_dir, exist_ok=True)
+            
+            # 保存原始基准测试结果到实验目录
+            original_filename = os.path.basename(args.input_file)
+            original_copy = os.path.join(experiment_dir, f"benchmark_raw_{timestamp}.txt")
+            import shutil
+            shutil.copy2(args.input_file, original_copy)
+            
+            # 导出CSV到实验目录
+            csv_output = analyzer.export_to_csv(args.output, experiment_dir)
+            
+            # 创建实验信息文件
+            info_file = os.path.join(experiment_dir, "experiment_info.txt")
+            with open(info_file, 'w') as f:
+                f.write(f"MicroBench Real-time Analysis Experiment\n")
+                f.write(f"{'='*50}\n")
+                f.write(f"Date: {date_str}\n")
+                f.write(f"Timestamp: {timestamp}\n")
+                f.write(f"Input File: {args.input_file}\n")
+                f.write(f"Test Cases: {len(results)}\n")
+                f.write(f"Generated Files:\n")
+                f.write(f"  - Raw Data: benchmark_raw_{timestamp}.txt\n")
+                f.write(f"  - Analysis: {os.path.basename(csv_output)}\n")
+                if not args.no_plot:
+                    f.write(f"  - Visualization: rt_analysis_{timestamp}.png\n")
+                f.write(f"\nExperiment Directory: {experiment_dir}\n")
+            
+            analyzer.print_summary()
+            
+            if not args.no_plot:
+                try:
+                    chart_file = analyzer.create_visualization(experiment_dir)
+                except ImportError as e:
+                    print("Warning: matplotlib not installed, skipping visualization chart generation")
+                    print("Install command: pip install matplotlib")
+                except Exception as e:
+                    print(f"Visualization generation failed: {e}")
+            
+            print(f"\n✓ Experiment completed. All files saved to: {experiment_dir}")
+            
+        except Exception as e:
+            print(f"Error occurred during analysis: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
