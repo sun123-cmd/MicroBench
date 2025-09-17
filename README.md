@@ -6,71 +6,29 @@ MicroBench is a scientific real-time determinism test suite designed to evaluate
 
 ## Test Cases
 
-### 1. Pure Computation
-**Purpose**: Baseline test for pure computational workload without branches
-**Implementation**:
-- Fixed arithmetic sequence: addition, multiplication, subtraction, modulo, XOR operations
-- Uses `volatile` variables to prevent compiler optimizations
-- Minimal variation in input (`i & 0x7`, `i & 0x3`) to avoid excessive compiler optimization
-- Expected behavior: Most deterministic performance due to absence of branch mispredictions
-
-### 2. Regular Branch Pattern
-**Purpose**: Tests predictable branch patterns that branch predictors can learn
-**Implementation**:
-- Simple modulo-4 pattern: `i % 4`
-- Four predictable conditional branches in sequence
-- TAGE branch predictor should learn this pattern effectively
-- Expected behavior: Good predictability after warmup phase
-
-### 3. Pseudo-Random Branch Pattern
-**Purpose**: Tests unpredictable branch patterns that challenge branch predictors
-**Implementation**:
-- Linear Congruential Generator (LCG): `seed = seed * 1664525 + 1013904223`
-- Pseudo-random modulo-7 pattern with multiple nested conditions
-- Designed to defeat branch prediction mechanisms
-- Expected behavior: Higher variance due to frequent branch mispredictions
-
-### 4. Nested Branch Pattern
-**Purpose**: Tests complex nested conditional structures
-**Implementation**:
-- Complex modulo-16 pattern: `(i * 7 + 3) % 16`
-- Multi-level nested if-else structures (up to 3 levels deep)
-- Bit manipulation conditions (`x & 0x1`, `x & 0x2`, etc.)
-- Expected behavior: Moderate to high variance depending on prediction capability
-
-### 5. Memory + Branch Mixed
-**Purpose**: Tests data-dependent branch patterns combined with memory access
-**Implementation**:
-- 1024-element aligned array with cache-friendly access patterns
-- Branch decisions based on memory values: `if (val1 > val2)`
-- Secondary memory accesses dependent on branch outcomes
-- Expected behavior: Variable performance due to cache effects and data-dependent branches
-
-### 6. High-Frequency Branches
-**Purpose**: Tests performance under high branch density
-**Implementation**:
-- Inner loop with 8 iterations containing multiple conditional statements
-- Three simultaneous bit-test conditions per iteration
-- Fixed, predictable pattern that should be well-predicted
-- Expected behavior: Very stable performance due to predictable pattern and potential loop unrolling
+| Test Case | Purpose | Implementation Details | Expected Behavior |
+|-----------|---------|------------------------|-------------------|
+| **1. Pure Computation** | Baseline test for pure computational workload without branches | • Fixed arithmetic sequence: addition, multiplication, subtraction, modulo, XOR operations<br>• Uses `volatile` variables to prevent compiler optimizations<br>• Minimal variation in input (`i & 0x7`, `i & 0x3`) to avoid excessive compiler optimization | Most deterministic performance due to absence of branch mispredictions |
+| **2. Regular Branch Pattern** | Tests predictable branch patterns that branch predictors can learn | • Simple modulo-4 pattern: `i % 4`<br>• Four predictable conditional branches in sequence<br>• TAGE branch predictor should learn this pattern effectively | Good predictability after warmup phase |
+| **3. Pseudo-Random Branch Pattern** | Tests unpredictable branch patterns that challenge branch predictors | • Linear Congruential Generator (LCG): `seed = seed * 1664525 + 1013904223`<br>• Pseudo-random modulo-7 pattern with multiple nested conditions<br>• Designed to defeat branch prediction mechanisms | Higher variance due to frequent branch mispredictions |
+| **4. Nested Branch Pattern** | Tests complex nested conditional structures | • Complex modulo-16 pattern: `(i * 7 + 3) % 16`<br>• Multi-level nested if-else structures (up to 3 levels deep)<br>• Bit manipulation conditions (`x & 0x1`, `x & 0x2`, etc.) | Moderate to high variance depending on prediction capability |
+| **5. Memory + Branch Mixed** | Tests data-dependent branch patterns combined with memory access | • 1024-element aligned array with cache-friendly access patterns<br>• Branch decisions based on memory values: `if (val1 > val2)`<br>• Secondary memory accesses dependent on branch outcomes | Variable performance due to cache effects and data-dependent branches |
+| **6. High-Frequency Branches** | Tests performance under high branch density | • Inner loop with 8 iterations containing multiple conditional statements<br>• Three simultaneous bit-test conditions per iteration<br>• Fixed, predictable pattern that should be well-predicted | Very stable performance due to predictable pattern and potential loop unrolling |
 
 ## Output Metrics
 
 The benchmark calculates and reports the following statistical metrics for each test case:
 
-### Core Timing Metrics
-- **Min**: Minimum execution time (CPU cycles)
-- **Max**: Maximum execution time (CPU cycles)
-- **Avg**: Average execution time (CPU cycles)
-
-### Variability Metrics
-- **Jitter**: Execution time variation (Max - Min), measures absolute timing uncertainty
-- **Standard Deviation**: Measures dispersion of execution times around the mean
-- **Coefficient of Variation**: Normalized variability (Std Dev / Average), enables comparison across different workloads
-
-### Real-time Performance Indicators
-- **95th Percentile**: 95% of executions complete within this time
-- **99th Percentile**: 99% of executions complete within this time (tail latency)
+| Metric Category | Metric | Description |
+|-----------------|--------|-------------|
+| **Core Timing** | Min | Minimum execution time (CPU cycles) |
+| | Max | Maximum execution time (CPU cycles) |
+| | Avg | Average execution time (CPU cycles) |
+| **Variability** | Jitter | Execution time variation (Max - Min), measures absolute timing uncertainty |
+| | Standard Deviation | Measures dispersion of execution times around the mean |
+| | Coefficient of Variation | Normalized variability (Std Dev / Average), enables comparison across different workloads |
+| **Real-time Performance** | 95th Percentile | 95% of executions complete within this time |
+| | 99th Percentile | 99% of executions complete within this time (tail latency) |
 
 ## Real-time Significance
 
@@ -90,10 +48,37 @@ The benchmark calculates and reports the following statistical metrics for each 
 
 ## Usage
 
+### Build Options
+
+| Build Command | Description | Output |
+|---------------|-------------|--------|
+| `make` or `make all-in-one` | **Single executable** (default) | `../bin/microbench` - contains all test cases |
+| `make individual` | **Individual executables** | `../bin/test_*` - separate executable for each test |
+| `make both` | **Both modes** | All executables (single + individual) |
+| `make original` | **Original version** | `../bin/microbench` - if source available |
+| `make clean` | **Clean build** | Removes all build artifacts |
+
+### Compilation Mode Comparison
+
+| Feature | All-in-One Mode | Individual Mode |
+|---------|-----------------|-----------------|
+| **Use Case** | Complete performance evaluation | Focused testing & debugging |
+| **File Count** | 1 executable (~17KB) | 6 executables (~16KB each) |
+| **Execution** | All tests in sequence | Single test per execution |
+| **Analysis** | Full statistical comparison | Isolated test analysis |
+| **Best For** | Research, benchmarking | Development, specific test debugging |
+
 ### Quick Start (Recommended)
 ```bash
-# Run complete benchmark and analysis from root directory
-cd ./src && make
+# Method 1: Single executable with all tests
+cd benchmark/microRTBench/src
+make all-in-one
+cd ../bin && ./microbench
+
+# Method 2: Individual test executables  
+cd benchmark/microRTBench/src
+make individual
+cd ../bin && ./test_pure_computation
 ```
 
 ### Statistical Multi-Run Testing (Recommended for Research)
