@@ -48,37 +48,11 @@ The benchmark calculates and reports the following statistical metrics for each 
 
 ## Usage
 
-### Build Options
-
-| Build Command | Description | Output |
-|---------------|-------------|--------|
-| `make` or `make all-in-one` | **Single executable** (default) | `../bin/microbench` - contains all test cases |
-| `make individual` | **Individual executables** | `../bin/test_*` - separate executable for each test |
-| `make both` | **Both modes** | All executables (single + individual) |
-| `make original` | **Original version** | `../bin/microbench` - if source available |
-| `make clean` | **Clean build** | Removes all build artifacts |
-
-### Compilation Mode Comparison
-
-| Feature | All-in-One Mode | Individual Mode |
-|---------|-----------------|-----------------|
-| **Use Case** | Complete performance evaluation | Focused testing & debugging |
-| **File Count** | 1 executable (~17KB) | 6 executables (~16KB each) |
-| **Execution** | All tests in sequence | Single test per execution |
-| **Analysis** | Full statistical comparison | Isolated test analysis |
-| **Best For** | Research, benchmarking | Development, specific test debugging |
-
 ### Quick Start (Recommended)
 ```bash
-# Method 1: Single executable with all tests
-cd benchmark/microRTBench/src
-make all-in-one
-cd ../bin && ./microbench
-
-# Method 2: Individual test executables  
-cd benchmark/microRTBench/src
-make individual
-cd ../bin && ./test_pure_computation
+# Run complete benchmark and analysis from root directory
+cd ./src && make # make all cases into single bin
+cd ./src && make individual # make cases individually
 ```
 
 ### Statistical Multi-Run Testing (Recommended for Research)
